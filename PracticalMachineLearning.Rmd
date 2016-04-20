@@ -1,0 +1,141 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "Vhishma Pant"
+output:
+  html_document:
+    keep_md: yes
+---
+
+## Overview
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+## Data Preparation
+
+```{r, echo=TRUE}
+# Load required libraries
+library(caret)
+library(ggplot2)
+library(randomForest)
+```
+
+#### Data Source
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+We will need to download those files and place in the working directory.
+
+```{r, echo=TRUE}
+#train_url <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+#download.file(url=train_url, destfile="pml-training.csv")
+
+#test_url <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+#download.file(url=test_url, destfile="pml-testing.csv")
+```
+
+
+#### Loading the Data
+
+```{r, echo=TRUE}
+# Read the training and testing data
+train <- read.csv("pml-training.csv")
+test <- read.csv("pml-testing.csv")
+```
+
+#### Inspect the Data
+
+```{r, echo=TRUE}
+#head(train)
+#summary(train)
+#str(train)
+```
+
+```{r, echo=TRUE}
+#head(test)
+#summary(test)
+#str(test)
+```
+
+We can see that we have training data with 160 variables and many missing values. SO, we will remove variables with near zero variance, variables with mostly missing data, and variables that are obviously not useful as predictors.
+
+#### Remove the variables with low variance
+We will analyze and omit the variables with zero variance as those would not contribute to the modeling process.
+
+```{r, echo=TRUE}
+low_var <- nearZeroVar(train, saveMetrics=TRUE)
+train <- train[-low_var, ]
+```
+
+```{r, echo=TRUE}
+dim(train)
+```
+
+We have reduced the number of variables to 100.
+
+#### Eliminate the variables with missing or null values
+
+The variables with data that is predominantly missing are eliminated. Now, there are only 59 variables remaining.
+```{r, echo=TRUE}
+na_count <- summary(is.na(train))
+na_count1 = sapply(train, function(x) {sum(is.na(x))})
+cols_with_nas = names(na_count1[na_count1>18000])
+train = train[, !names(train) %in% cols_with_nas]
+dim(train)
+```
+
+#### Remove unuseful variables
+The first 6 variables are removed as they are not useful. They contain descriptive information that would not be used in analysis. As can be seen, 53 variables now remain out of an original 160 variables.
+```{r, echo=TRUE}
+train <- train[-c(1:6)]
+dim(train)
+```
+
+### Splitting training/testing data
+We will be splitting the data for the validation process. We will now have two data sets: 60% for myTraining, 40% for myTesting. This is done for the model to be validated against a clean dataset.
+
+```{r, echo=TRUE}
+inTrain <- createDataPartition(y=train$classe, p=0.6, list=FALSE)
+myTraining <- train[inTrain, ]
+myTesting <- train[-inTrain, ]
+
+dim(myTraining)
+dim(myTesting)
+```
+
+## Modeling
+
+### Random Forest Model
+I will be using random-forest technique to generate the predictive model.
+```{r, echo=TRUE}
+fitControl <- trainControl(method="cv", number=3, verboseIter=F)
+fit <- train(classe ~ ., data=myTraining, method="rf", trControl=fitControl)
+```
+
+```{r, echo=TRUE}
+# print final model to see tuning parameters it chose
+fit$finalModel
+```
+
+Now, the final model is used to predict the outcome in the validation data set. This will be used to do cross validation on myTesting data.
+```{r, echo=TRUE}
+pred_test <- predict(fit, myTesting, type = "class")
+confusionMatrix(myTesting$classe, pred_test)
+```
+
+```{r, echo=TRUE}
+pred_train <- predict(fit, myTraining, type = "class")
+confusionMatrix(myTraining$classe, pred_train)
+```
+
+From the model summary, we can see that during the cross validation we get accuracy of 98.8% with out-of-sample error of 0.02%.
+
+### Model re-run
+```{r, echo=TRUE}
+predict_final <- predict(fit, test, type = "class")
+print(predict_final)
+```
+
